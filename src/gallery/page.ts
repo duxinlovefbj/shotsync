@@ -77,7 +77,7 @@ export const galleryHTML = /* html */ `<!doctype html>
   <div id="shareDialog" class="dialog-mask hidden">
     <div class="dialog-card">
       <h3>生成公开分享链接</h3>
-      <div style="font-size:13px;color:#aaa">选择链接有效期：</div>
+      <div id="shareDialogTip" style="font-size:13px;color:#aaa">选择链接有效期：</div>
       <select id="shareTtlSelect">
         <option value="3600">1 小时</option>
         <option value="86400">1 天 (24 小时)</option>
@@ -201,6 +201,24 @@ $("#closeBtn").onclick = () => $("#viewer").classList.add("hidden");
 // 分享 TTL 弹窗逻辑
 $("#shareBtn").onclick = () => {
   if (!currentItem) return;
+  const isLarge = currentItem.size > 500 * 1024 * 1024;
+  const sel = $("#shareTtlSelect");
+  if (isLarge) {
+    sel.innerHTML = `
+      <option value="3600">1 小时</option>
+      <option value="86400">1 天 (24 小时)</option>
+      <option value="259200" selected>3 天 (大文件最长)</option>
+    `;
+    $("#shareDialogTip").textContent = "大文件 (>500MB) 为保护容量，最长支持分享 3 天：";
+  } else {
+    sel.innerHTML = `
+      <option value="3600">1 小时</option>
+      <option value="86400">1 天 (24 小时)</option>
+      <option value="604800" selected>7 天</option>
+      <option value="2592000">30 天</option>
+    `;
+    $("#shareDialogTip").textContent = "选择链接有效期：";
+  }
   $("#shareDialog").classList.remove("hidden");
 };
 $("#shareDialogCancel").onclick = () => $("#shareDialog").classList.add("hidden");
@@ -212,9 +230,9 @@ $("#shareDialogConfirm").onclick = async () => {
   try {
     const res = await fetch("/api/share/" + currentItem.id + "?ttl=" + ttlSec, { method: "POST", headers: authHeaders() });
     if (!res.ok) { toast("生成链接失败"); return; }
-    const { url } = await res.json();
-    const days = Math.round(ttlSec / 86400);
-    const ttlDesc = days >= 1 ? days + "天" : Math.round(ttlSec / 3600) + "小时";
+    const { url, exp, ttlSec: actualTtl } = await res.json();
+    const days = Math.round(actualTtl / 86400);
+    const ttlDesc = days >= 1 ? days + "天" : Math.round(actualTtl / 3600) + "小时";
     try {
       await navigator.clipboard.writeText(url);
       toast("链接已复制（" + ttlDesc + "有效）");

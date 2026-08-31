@@ -1,6 +1,12 @@
 import { Env, err } from "./responses";
 import { handleHealth } from "./handlers/health";
 import { handleUpload } from "./handlers/upload";
+import {
+  handleMultipartInit,
+  handleMultipartPart,
+  handleMultipartComplete,
+  handleMultipartAbort,
+} from "./handlers/multipart";
 import { handleList } from "./handlers/list";
 import { handleImage } from "./handlers/image";
 import { handleDelete } from "./handlers/del";
@@ -32,7 +38,21 @@ export default {
       return handleHealth(request, env);
     }
 
-    // Upload endpoint (with v1 alias)
+    // Multipart upload endpoints (up to 3GB, 50MB chunks)
+    if (pathname === "/api/upload/multipart/init" || pathname === "/api/v1/upload/multipart/init") {
+      return m === "POST" ? handleMultipartInit(request, env) : err(405, "method not allowed");
+    }
+    if (pathname === "/api/upload/multipart/part" || pathname === "/api/v1/upload/multipart/part") {
+      return m === "PUT" || m === "POST" ? handleMultipartPart(request, env) : err(405, "method not allowed");
+    }
+    if (pathname === "/api/upload/multipart/complete" || pathname === "/api/v1/upload/multipart/complete") {
+      return m === "POST" ? handleMultipartComplete(request, env) : err(405, "method not allowed");
+    }
+    if (pathname === "/api/upload/multipart/abort" || pathname === "/api/v1/upload/multipart/abort") {
+      return m === "POST" ? handleMultipartAbort(request, env) : err(405, "method not allowed");
+    }
+
+    // Standard direct upload endpoint (with v1 alias, max 90MB)
     if (pathname === "/api/upload" || pathname === "/api/v1/upload") {
       return m === "POST" ? handleUpload(request, env) : err(405, "method not allowed");
     }

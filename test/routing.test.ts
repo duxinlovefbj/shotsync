@@ -54,7 +54,7 @@ describe("routing end-to-end", () => {
     expect(res.status).toBe(200);
     const data = await res.json<{ ok: boolean; version: string; storage: string; maxUploadBytes: number }>();
     expect(data.ok).toBe(true);
-    expect(data.version).toBe("1.0.0");
+    expect(data.version).toBe("1.1.0");
     expect(data.storage).toBe("r2");
     expect(data.maxUploadBytes).toBe(90 * 1024 * 1024);
   });
