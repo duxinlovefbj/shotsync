@@ -48,10 +48,18 @@ describe("text items in the pool", () => {
     await SELF.fetch(`https://x/api/img/${id}`, { method: "DELETE", headers: T }).then((r) => r.json());
   });
 
-  it("still rejects a genuinely unsupported type with 415", async () => {
+  it("supports arbitrary binary files (like application/octet-stream)", async () => {
     const fd = new FormData();
-    fd.set("full", new Blob(["x"], { type: "application/octet-stream" }), "x.bin");
+    fd.set("full", new Blob(["binary data"], { type: "application/octet-stream" }), "archive.bin");
     const res = await SELF.fetch("https://x/api/upload", { method: "POST", headers: T, body: fd });
-    expect(res.status).toBe(415);
+    expect(res.status).toBe(200);
+    const { id } = await res.json<{ id: string }>();
+    const got = await SELF.fetch(`https://x/i/${id}`, { headers: T });
+    expect(got.status).toBe(200);
+    expect(got.headers.get("content-type")).toContain("application/octet-stream");
+    expect(got.headers.get("content-disposition")).toContain("archive.bin");
+    await got.arrayBuffer(); // Consume stream to release file handle on Windows
+    const delRes = await SELF.fetch(`https://x/api/img/${id}`, { method: "DELETE", headers: T });
+    await delRes.json();
   });
 });

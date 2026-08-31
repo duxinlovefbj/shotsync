@@ -22,26 +22,36 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   }
   const full = fullEntry as File;
 
-  // Normalize the MIME: strip any parameters like "; charset=utf-8" so a
-  // non-PWA client (curl, Shortcut) isn't silently 415'd on text uploads.
-  const mimeType = full.type.split(";")[0].trim().toLowerCase();
-  const ext = EXT_BY_TYPE[mimeType];
-  if (!ext) return err(415, `unsupported type: ${full.type}`);
+  // Extract MIME or fallback to octet-stream
+  const contentType = full.type || "application/octet-stream";
   if (full.size > MAX_FULL_BYTES) return err(413, "full too large");
 
   const thumbEntry = form.get("thumb");
   const hasThumb = !!(thumbEntry && typeof thumbEntry === "object" && "stream" in thumbEntry && "name" in thumbEntry);
 
+  const rawFilename = request.headers.get("x-filename") || full.name || "file";
+  // Decode if header was URI encoded
+  let origName = rawFilename;
+  try {
+    origName = decodeURIComponent(rawFilename);
+  } catch {}
+
   const id = makeId(Date.now(), randSuffix());
   const meta = {
     source: request.headers.get("x-source") || "unknown",
-    origName: request.headers.get("x-filename") || full.name || "",
+    origName,
     uploadedAt: new Date().toISOString(),
     hasThumb: String(hasThumb),
   };
 
-  await env.BUCKET.put(fullKey(id, ext), full.stream(), {
-    httpMetadata: { contentType: full.type },
+  const encodedFilename = encodeURIComponent(origName);
+  const contentDisposition = `inline; filename="${origName.replace(/["\\]/g, "_")}"; filename*=UTF-8''${encodedFilename}`;
+
+  await env.BUCKET.put(fullKey(id), full.stream(), {
+    httpMetadata: {
+      contentType,
+      contentDisposition,
+    },
     customMetadata: meta,
   });
 
@@ -52,5 +62,5 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     });
   }
 
-  return json({ id });
+  return json({ id, origName });
 }

@@ -22,8 +22,8 @@ export function epochMsFromId(id: string): number {
   return INV_BASE - inv;
 }
 
-export function fullKey(id: string, ext: string): string {
-  return `full/${id}.${ext}`;
+export function fullKey(id: string, ext?: string): string {
+  return ext ? `full/${id}.${ext}` : `full/${id}`;
 }
 
 export function thumbKey(id: string): string {

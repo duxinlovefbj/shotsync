@@ -27,6 +27,8 @@ export async function handleList(request: Request, env: Env): Promise<Response> 
       contentType: o.httpMetadata?.contentType || "application/octet-stream",
       hasThumb: o.customMetadata?.hasThumb === "true",
       source: o.customMetadata?.source || "unknown",
+      origName: o.customMetadata?.origName || "",
+      size: o.size,
     };
   });
 

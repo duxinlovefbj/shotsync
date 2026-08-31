@@ -32,10 +32,17 @@ describe("handleUpload", () => {
     expect(res.status).toBe(400);
   });
 
-  it("415 for non-web-safe full type", async () => {
-    const heic = new Blob([new Uint8Array([9])], { type: "image/heic" });
-    const res = await handleUpload(uploadReq({ token: "test-token", full: heic }), env as Env);
-    expect(res.status).toBe(415);
+  it("accepts arbitrary file types (zip, bin, etc.) without 415", async () => {
+    const zip = new Blob([new Uint8Array([80, 75, 3, 4])], { type: "application/zip" });
+    const res = await handleUpload(uploadReq({ token: "test-token", full: zip }), env as Env);
+    expect(res.status).toBe(200);
+    const { id, origName } = await res.json<{ id: string; origName: string }>();
+    expect(origName).toBe("shot.png");
+    const obj = await (env as Env).BUCKET.get(`full/${id}`);
+    expect(obj).not.toBeNull();
+    expect(obj!.httpMetadata?.contentType).toBe("application/zip");
+    expect(obj!.httpMetadata?.contentDisposition).toContain("filename=");
+    await obj!.body?.cancel();
   });
 
   it("stores full, returns id, hasThumb=false when no thumb", async () => {
@@ -43,7 +50,7 @@ describe("handleUpload", () => {
     expect(res.status).toBe(200);
     const { id } = await res.json<{ id: string }>();
     expect(id).toMatch(/^\d{16}-[0-9a-z]{6}$/);
-    const obj = await (env as Env).BUCKET.get(`full/${id}.png`);
+    const obj = await (env as Env).BUCKET.get(`full/${id}`);
     expect(obj).not.toBeNull();
     expect(obj!.customMetadata?.hasThumb).toBe("false");
     expect(obj!.customMetadata?.source).toBe("pwa");
@@ -57,7 +64,7 @@ describe("handleUpload", () => {
     const thumb = await (env as Env).BUCKET.get(`thumb/${id}.jpg`);
     expect(thumb).not.toBeNull();
     await thumb!.body?.cancel();
-    const full = await (env as Env).BUCKET.get(`full/${id}.png`);
+    const full = await (env as Env).BUCKET.get(`full/${id}`);
     expect(full!.customMetadata?.hasThumb).toBe("true");
     // Consume the stream to avoid cleanup issues
     await full!.body?.cancel();

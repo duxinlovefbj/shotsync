@@ -74,4 +74,15 @@ describe("share endpoints", () => {
     const res = await SELF.fetch(`https://x/s/GHOSTID?exp=${exp}&sig=${sig}`);
     expect(res.status).toBe(404);
   });
+
+  it("supports custom TTL in query parameter", async () => {
+    const id = await uploadImage();
+    const now = Date.now();
+    const sh = await SELF.fetch(`https://x/api/share/${id}?ttl=3600`, { method: "POST", headers: T });
+    expect(sh.status).toBe(200);
+    const { exp, ttlSec } = await sh.json<{ exp: number; ttlSec: number }>();
+    expect(ttlSec).toBe(3600);
+    expect(exp).toBeGreaterThanOrEqual(now + 3590 * 1000);
+    expect(exp).toBeLessThanOrEqual(now + 3610 * 1000);
+  });
 });
