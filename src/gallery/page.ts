@@ -1,3 +1,9 @@
+import {
+  MAX_SINGLE_UPLOAD_BYTES,
+  MAX_TOTAL_FILE_BYTES,
+  RECOMMENDED_CHUNK_SIZE_BYTES,
+} from "../responses";
+
 // The demo variant is derived once at module load (see the bottom of this file)
 // by flipping the DEMO const the inline script declares.
 export const galleryHTML = /* html */ `<!doctype html>
@@ -125,6 +131,10 @@ export const galleryHTML = /* html */ `<!doctype html>
 const DEMO = false;
 const DEMO_EN = DEMO && !((navigator.language || "").toLowerCase().startsWith("zh"));
 const TOKEN_KEY = "shotsync_token";
+const DIRECT_UPLOAD_LIMIT = ${MAX_SINGLE_UPLOAD_BYTES};
+const MAX_MULTIPART_SIZE = ${MAX_TOTAL_FILE_BYTES};
+const DEFAULT_CHUNK_SIZE = ${RECOMMENDED_CHUNK_SIZE_BYTES};
+const MULTIPART_STATE_PREFIX = "shotsync_multipart:";
 let token = localStorage.getItem(TOKEN_KEY) || "";
 
 const $ = (s) => document.querySelector(s);
@@ -484,7 +494,148 @@ async function encode(bitmap, maxEdge, type, quality) {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
 
+function multipartStateKey(file) {
+  return MULTIPART_STATE_PREFIX + file.name + ":" + file.size + ":" + file.lastModified;
+}
+
+function loadMultipartState(file) {
+  try {
+    const state = JSON.parse(localStorage.getItem(multipartStateKey(file)) || "null");
+    if (!state || typeof state.id !== "string" || typeof state.uploadId !== "string" ||
+        typeof state.uploadToken !== "string" || !Number.isSafeInteger(state.chunkSize) || state.chunkSize <= 0 ||
+        state.size !== file.size || !state.parts || typeof state.parts !== "object") return null;
+    return state;
+  } catch { return null; }
+}
+
+function saveMultipartState(file, state) {
+  try { localStorage.setItem(multipartStateKey(file), JSON.stringify(state)); } catch {}
+}
+
+function clearMultipartState(file) {
+  try { localStorage.removeItem(multipartStateKey(file)); } catch {}
+}
+
+async function responseError(res, action) {
+  let detail = "";
+  try {
+    const body = await res.json();
+    detail = body && body.error && body.error.message ? ": " + body.error.message : "";
+  } catch {}
+  const error = new Error(action + " failed (" + res.status + ")" + detail);
+  error.status = res.status;
+  error.retryable = res.status === 429 || res.status >= 500;
+  return error;
+}
+
+function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+async function uploadMultipartPart(file, state, partNumber) {
+  const start = (partNumber - 1) * state.chunkSize;
+  const end = Math.min(file.size, start + state.chunkSize);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch("/api/upload/multipart/part?id=" + encodeURIComponent(state.id) +
+        "&uploadId=" + encodeURIComponent(state.uploadId) + "&partNumber=" + partNumber, {
+          method: "PUT",
+          headers: {
+            ...authHeaders(),
+            "x-multipart-token": state.uploadToken,
+            "content-type": "application/octet-stream",
+          },
+          body: file.slice(start, end),
+        });
+      if (!res.ok) throw await responseError(res, "part " + partNumber);
+      return await res.json();
+    } catch (error) {
+      if (!error.retryable || attempt === 2) throw error;
+      await delay(500 * Math.pow(2, attempt));
+    }
+  }
+  throw new Error("part upload failed");
+}
+
+async function uploadMultipartSession(file, state) {
+  const totalParts = Math.ceil(file.size / state.chunkSize);
+  const pending = [];
+  for (let i = 1; i <= totalParts; i++) if (!state.parts[i]) pending.push(i);
+
+  let cursor = 0;
+  let firstError = null;
+  async function worker() {
+    while (!firstError && cursor < pending.length) {
+      const partNumber = pending[cursor++];
+      try {
+        const part = await uploadMultipartPart(file, state, partNumber);
+        if (!part || part.partNumber !== partNumber || typeof part.etag !== "string" || !part.etag) {
+          throw new Error("invalid response for part " + partNumber);
+        }
+        state.parts[partNumber] = { partNumber: partNumber, etag: part.etag };
+        saveMultipartState(file, state);
+      } catch (error) {
+        firstError = error;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(3, pending.length) }, () => worker()));
+  if (firstError) throw firstError;
+
+  const parts = [];
+  for (let i = 1; i <= totalParts; i++) {
+    if (!state.parts[i]) throw new Error("missing uploaded part " + i);
+    parts.push(state.parts[i]);
+  }
+
+  const res = await fetch("/api/upload/multipart/complete", {
+    method: "POST",
+    headers: { ...authHeaders(), "content-type": "application/json", "x-multipart-token": state.uploadToken },
+    body: JSON.stringify({ id: state.id, uploadId: state.uploadId, parts: parts }),
+  });
+  if (!res.ok) throw await responseError(res, "complete multipart upload");
+  return await res.json();
+}
+
+async function uploadMultipart(file) {
+  if (file.size > MAX_MULTIPART_SIZE) throw new Error("file exceeds the 3GB upload limit");
+
+  // Retry once with a fresh session when the persisted R2 session expired or
+  // the auth token was rotated. Other failures keep the local state for resume.
+  for (let sessionAttempt = 0; sessionAttempt < 2; sessionAttempt++) {
+    let state = loadMultipartState(file);
+    if (!state) {
+      const initRes = await fetch("/api/upload/multipart/init", {
+        method: "POST",
+        headers: { ...authHeaders(), "content-type": "application/json", "x-source": "pwa" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type || "application/octet-stream", size: file.size }),
+      });
+      if (!initRes.ok) throw await responseError(initRes, "init multipart upload");
+      const init = await initRes.json();
+      if (!init.id || !init.uploadId || !init.uploadToken || !Number.isSafeInteger(init.chunkSize) || init.chunkSize <= 0) {
+        throw new Error("invalid multipart init response");
+      }
+      state = { id: init.id, uploadId: init.uploadId, uploadToken: init.uploadToken,
+        size: file.size, chunkSize: init.chunkSize || DEFAULT_CHUNK_SIZE, parts: {} };
+      saveMultipartState(file, state);
+    }
+
+    try {
+      const result = await uploadMultipartSession(file, state);
+      clearMultipartState(file);
+      return result.id;
+    } catch (error) {
+      if ((error.status === 401 || error.status === 404) && sessionAttempt === 0) {
+        clearMultipartState(file);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("multipart upload failed");
+}
+
 async function uploadOne(file) {
+  if (file.size > DIRECT_UPLOAD_LIMIT) return uploadMultipart(file);
+
   const isImg = file.type.startsWith("image/");
   const fd = new FormData();
 

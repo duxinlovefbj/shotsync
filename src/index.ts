@@ -43,7 +43,7 @@ export default {
       return m === "POST" ? handleMultipartInit(request, env) : err(405, "method not allowed");
     }
     if (pathname === "/api/upload/multipart/part" || pathname === "/api/v1/upload/multipart/part") {
-      return m === "PUT" || m === "POST" ? handleMultipartPart(request, env) : err(405, "method not allowed");
+      return m === "PUT" ? handleMultipartPart(request, env) : err(405, "method not allowed");
     }
     if (pathname === "/api/upload/multipart/complete" || pathname === "/api/v1/upload/multipart/complete") {
       return m === "POST" ? handleMultipartComplete(request, env) : err(405, "method not allowed");

@@ -14,7 +14,8 @@
 - **核心规格与限制**:
   - **单次直传上限**: 90 MB（单请求 POST `/api/upload`）
   - **分块上传支持**: **最高 3 GB**（S3 兼容 Multipart API，推荐分块大小 **50 MB**）
-  - **多线程/断点续传**: 全面支持 HTTP `Range` 头（`206 Partial Content`）
+  - **分块并发/断点续传**: 客户端可并发上传分块；需持久化 init 返回的 `id`、`uploadId`、`uploadToken` 和已完成分块的 ETag
+  - **分块下载/断点续传**: 支持 HTTP `Range` 头（`206 Partial Content`）
   - **大文件分享时效**: 
     - 普通文件（≤ 500 MB）：最长可分享 **30 天**（默认 7 天）
     - 大文件（> 500 MB）：为保护 10 GB 存储桶容量，分享链接最长有效期自动收紧至 **3 天**（259,200 秒）
@@ -82,19 +83,24 @@
     "id": "7999827361234567-abcdef",
     "origName": "huge_video.mp4",
     "uploadId": "IB44gK...xyz",
+    "uploadToken": "eyJpZCI6...signature",
     "chunkSize": 52428800,
     "maxTotalBytes": 3221225472
   }
   ```
 
+`uploadToken` 必须原样保存，并在后续三个接口中通过 `X-Multipart-Token` 请求头携带。它绑定了 `id`、`uploadId`、声明文件大小和分块大小，不能由客户端自行修改。
+
 ### 3.2 上传单个分块 (50MB)
 - **方法与路径**: `PUT /api/upload/multipart/part?id=<id>&uploadId=<uploadId>&partNumber=<N>`
 - **鉴权**: 必须
+- **请求头**: `X-Multipart-Token: <init 返回的 uploadToken>`；如果提供 `Content-Length`，必须与该分块实际长度一致
 - **Query 参数**:
   - `id`: init 返回的文件 ID
   - `uploadId`: init 返回的 uploadId
   - `partNumber`: 分块编号（从 1 开始，1, 2, 3...）
-- **请求体**: 该分块的二进制数据流（`application/octet-stream`，最后一块除外，推荐每块 ≥ 5MB，通常 50MB）
+- **请求体**: 该分块的二进制数据流（`application/octet-stream`）
+- **分块规则**: 使用 init 返回的 `chunkSize`；除最后一块外必须正好是该大小，最后一块必须正好是剩余字节数。分块编号必须从 1 连续递增，最多 10000 块。
 - **返回数据 (JSON)**:
   ```json
   {
@@ -106,6 +112,7 @@
 ### 3.3 完成合并
 - **方法与路径**: `POST /api/upload/multipart/complete`
 - **鉴权**: 必须
+- **请求头**: `X-Multipart-Token: <init 返回的 uploadToken>`
 - **请求体 (JSON)**:
   ```json
   {
@@ -129,7 +136,13 @@
 
 ### 3.4 取消与中止分块上传
 - **方法与路径**: `POST /api/upload/multipart/abort`
+- **鉴权**: 必须
+- **请求头**: `X-Multipart-Token: <init 返回的 uploadToken>`
 - **请求体 (JSON)**: `{"id": "...", "uploadId": "..."}`
+
+取消是幂等的；如果会话已经被 R2 自动清理，也返回成功。
+
+客户端应在每个分块成功后保存 ETag。网络错误只需要重试对应的 `partNumber`；不要因为单个分块失败就立即丢弃整个会话。R2 未完成的 multipart 会话默认在 7 天后自动中止。
 
 ---
 
@@ -157,6 +170,8 @@ Accept-Ranges: bytes
 ---
 
 ## 5. Python 智能客户端移植代码（支持自动判断直传/分块）
+
+下面是最小的顺序上传示例；生产客户端应把 `id`、`uploadId`、`uploadToken` 和 `parts` 持久化，并可并发上传尚未完成的分块。网页端和 Mac 客户端已经这样处理。
 
 ```python
 import os
@@ -196,13 +211,14 @@ class ShotSyncClient:
         print(f"文件大于 90MB ({file_size / 1024 / 1024:.1f} MB)，启动 50MB 分块上传...")
         init_res = requests.post(
             f"{self.base_url}/api/upload/multipart/init",
-            headers=self.headers,
-            json={"filename": filename, "size": file_size},
+            headers={**self.headers, "x-source": source},
+            json={"filename": filename, "contentType": "application/octet-stream", "size": file_size},
         )
         init_res.raise_for_status()
         init_data = init_res.json()
         item_id = init_data["id"]
         upload_id = init_data["uploadId"]
+        upload_token = init_data["uploadToken"]
 
         parts = []
         total_parts = math.ceil(file_size / self.chunk_size)
@@ -214,7 +230,8 @@ class ShotSyncClient:
                     print(f"上传分块 {part_num}/{total_parts} ({len(chunk_data)} bytes)...")
                     part_res = requests.put(
                         f"{self.base_url}/api/upload/multipart/part",
-                        headers={**self.headers, "content-type": "application/octet-stream"},
+                        headers={**self.headers, "x-multipart-token": upload_token,
+                                 "content-type": "application/octet-stream"},
                         params={"id": item_id, "uploadId": upload_id, "partNumber": part_num},
                         data=chunk_data,
                     )
@@ -224,7 +241,7 @@ class ShotSyncClient:
             # 完成合并
             comp_res = requests.post(
                 f"{self.base_url}/api/upload/multipart/complete",
-                headers=self.headers,
+                headers={**self.headers, "x-multipart-token": upload_token},
                 json={"id": item_id, "uploadId": upload_id, "parts": parts},
             )
             comp_res.raise_for_status()
@@ -234,7 +251,7 @@ class ShotSyncClient:
             # 失败取消
             requests.post(
                 f"{self.base_url}/api/upload/multipart/abort",
-                headers=self.headers,
+                headers={**self.headers, "x-multipart-token": upload_token},
                 json={"id": item_id, "uploadId": upload_id},
             )
             raise e

@@ -17,9 +17,9 @@ First launch asks for your Worker base URL + token (stored in the Keychain), the
 
 ## How it works
 - You keep taking screenshots with the macOS shortcuts — `⌘⇧3` (whole screen), `⌘⇧4` (selection), `⌘⇧5` (capture panel). shotsync registers no shortcuts of its own; it only changes where those shots land. The menu's **How to use…** panel restates this and reports whether the redirect and the Worker are actually set up.
-- Watches `~/Pictures/shotsync` via FSEvents; each new `.png` is thumbnailed client-side and POSTed to `/api/upload` (`X-Source: mac`).
+- Watches `~/Pictures/shotsync` via FSEvents; files up to 90MB are thumbnailed client-side and POSTed to `/api/upload` (`X-Source: mac`), while larger files use resumable 50MB multipart uploads.
 - Uploaded files are marked with an extended attribute so restarts don't re-upload.
-- Failures go to a persistent queue and retry with capped exponential backoff.
+- Multipart session IDs and part ETags are persisted under the app support directory, so failures and app restarts resume from the last completed part. Failures go to a persistent queue and retry with capped exponential backoff.
 
 ## Uninstall
 ```bash

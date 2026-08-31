@@ -33,7 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let support = NSHomeDirectory() + "/Library/Application Support/shotsync"
     try? FileManager.default.createDirectory(atPath: support, withIntermediateDirectories: true)
     try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
-    uploader = Uploader(queue: UploadQueue(fileURL: URL(fileURLWithPath: support + "/queue.json")))
+    uploader = Uploader(
+      queue: UploadQueue(fileURL: URL(fileURLWithPath: support + "/queue.json")),
+      stateURL: URL(fileURLWithPath: support + "/multipart-state.json"))
 
     dirManager = ScreenshotDirManager(
       backend: SystemDefaultsBackend(),

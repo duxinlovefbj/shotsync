@@ -34,7 +34,7 @@ The dividing line is **a live transfer vs. a pool that waits**. LocalSend and Pa
 | Where the bytes go | your own Cloudflare R2 | device to device, no server | peer-to-peer, public signalling server |
 | Left behind after transfer | 30 days, browsable | nothing | nothing |
 | Setup | deploy once, ~5 min | install, then open | just open the page |
-| Per-item size limit | 25 MB | bounded by disk | bounded by the connection |
+| Per-item size limit | 3 GB (multipart) | bounded by disk | bounded by the connection |
 
 **Choose LocalSend if** both devices are on the same Wi-Fi, both in front of you, and the file is large. It is peer-to-peer, has no practical size ceiling, and needs no internet at all.
 
