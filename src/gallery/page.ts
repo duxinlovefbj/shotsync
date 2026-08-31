@@ -204,19 +204,15 @@ $("#shareBtn").onclick = () => {
   const isLarge = currentItem.size > 500 * 1024 * 1024;
   const sel = $("#shareTtlSelect");
   if (isLarge) {
-    sel.innerHTML = `
-      <option value="3600">1 小时</option>
-      <option value="86400">1 天 (24 小时)</option>
-      <option value="259200" selected>3 天 (大文件最长)</option>
-    `;
+    sel.innerHTML = '<option value="3600">1 小时</option>' +
+                    '<option value="86400">1 天 (24 小时)</option>' +
+                    '<option value="259200" selected>3 天 (大文件最长)</option>';
     $("#shareDialogTip").textContent = "大文件 (>500MB) 为保护容量，最长支持分享 3 天：";
   } else {
-    sel.innerHTML = `
-      <option value="3600">1 小时</option>
-      <option value="86400">1 天 (24 小时)</option>
-      <option value="604800" selected>7 天</option>
-      <option value="2592000">30 天</option>
-    `;
+    sel.innerHTML = '<option value="3600">1 小时</option>' +
+                    '<option value="86400">1 天 (24 小时)</option>' +
+                    '<option value="604800" selected>7 天</option>' +
+                    '<option value="2592000">30 天</option>';
     $("#shareDialogTip").textContent = "选择链接有效期：";
   }
   $("#shareDialog").classList.remove("hidden");
