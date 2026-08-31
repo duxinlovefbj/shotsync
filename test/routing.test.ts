@@ -49,6 +49,24 @@ describe("routing end-to-end", () => {
     await res.json();
   });
 
+  it("GET /api/health returns system info without auth", async () => {
+    const res = await SELF.fetch("https://x/api/health");
+    expect(res.status).toBe(200);
+    const data = await res.json<{ ok: boolean; version: string; storage: string; maxUploadBytes: number }>();
+    expect(data.ok).toBe(true);
+    expect(data.version).toBe("1.0.0");
+    expect(data.storage).toBe("r2");
+    expect(data.maxUploadBytes).toBe(90 * 1024 * 1024);
+  });
+
+  it("supports /api/v1/* aliases", async () => {
+    const health = await SELF.fetch("https://x/api/v1/health");
+    expect(health.status).toBe(200);
+
+    const list = await SELF.fetch("https://x/api/v1/list", { headers: T });
+    expect(list.status).toBe(200);
+  });
+
   it("serves manifest and sw", async () => {
     const mani = await SELF.fetch("https://x/manifest.webmanifest");
     expect(mani.status).toBe(200);

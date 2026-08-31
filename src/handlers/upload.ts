@@ -1,8 +1,6 @@
-import { Env, err, json } from "../responses";
+import { Env, err, json, MAX_UPLOAD_BYTES } from "../responses";
 import { isAuthed } from "../auth";
 import { EXT_BY_TYPE, fullKey, makeId, randSuffix, thumbKey } from "../ids";
-
-const MAX_FULL_BYTES = 25 * 1024 * 1024;
 
 export async function handleUpload(request: Request, env: Env): Promise<Response> {
   if (!isAuthed(request, env)) return err(401, "unauthorized");
@@ -24,7 +22,9 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
   // Extract MIME or fallback to octet-stream
   const contentType = full.type || "application/octet-stream";
-  if (full.size > MAX_FULL_BYTES) return err(413, "full too large");
+  if (full.size > MAX_UPLOAD_BYTES) {
+    return err(413, `file exceeds upload limit (${MAX_UPLOAD_BYTES} bytes)`, "FILE_TOO_LARGE");
+  }
 
   const thumbEntry = form.get("thumb");
   const hasThumb = !!(thumbEntry && typeof thumbEntry === "object" && "stream" in thumbEntry && "name" in thumbEntry);

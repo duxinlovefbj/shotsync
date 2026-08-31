@@ -1,4 +1,5 @@
 import { Env, err } from "./responses";
+import { handleHealth } from "./handlers/health";
 import { handleUpload } from "./handlers/upload";
 import { handleList } from "./handlers/list";
 import { handleImage } from "./handlers/image";
@@ -25,22 +26,34 @@ export default {
     if (pathname === "/sw.js" && m === "GET") {
       return new Response(swJS, { headers: { "content-type": "text/javascript" } });
     }
-    if (pathname === "/api/upload") {
+
+    // Health check endpoint (public probe)
+    if ((pathname === "/api/health" || pathname === "/api/v1/health") && m === "GET") {
+      return handleHealth(request, env);
+    }
+
+    // Upload endpoint (with v1 alias)
+    if (pathname === "/api/upload" || pathname === "/api/v1/upload") {
       return m === "POST" ? handleUpload(request, env) : err(405, "method not allowed");
     }
-    if (pathname === "/api/list") {
+
+    // List endpoint (with v1 alias)
+    if (pathname === "/api/list" || pathname === "/api/v1/list") {
       return m === "GET" ? handleList(request, env) : err(405, "method not allowed");
     }
+
     if (pathname.startsWith("/i/")) {
       const id = decodeURIComponent(pathname.slice("/i/".length));
       return m === "GET" ? handleImage(request, env, id) : err(405, "method not allowed");
     }
-    if (pathname.startsWith("/api/img/")) {
-      const id = decodeURIComponent(pathname.slice("/api/img/".length));
+    if (pathname.startsWith("/api/img/") || pathname.startsWith("/api/v1/img/")) {
+      const prefix = pathname.startsWith("/api/v1/img/") ? "/api/v1/img/" : "/api/img/";
+      const id = decodeURIComponent(pathname.slice(prefix.length));
       return m === "DELETE" ? handleDelete(request, env, id) : err(405, "method not allowed");
     }
-    if (pathname.startsWith("/api/share/")) {
-      const id = decodeURIComponent(pathname.slice("/api/share/".length));
+    if (pathname.startsWith("/api/share/") || pathname.startsWith("/api/v1/share/")) {
+      const prefix = pathname.startsWith("/api/v1/share/") ? "/api/v1/share/" : "/api/share/";
+      const id = decodeURIComponent(pathname.slice(prefix.length));
       return m === "POST" ? handleShareCreate(request, env, id) : err(405, "method not allowed");
     }
     if (pathname.startsWith("/s/")) {
