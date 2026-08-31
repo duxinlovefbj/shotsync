@@ -14,72 +14,83 @@ import { handleShareCreate, handleSharedItem } from "./handlers/share";
 import { galleryDemoHTML, galleryHTML } from "./gallery/page";
 import { manifestJSON } from "./gallery/manifest";
 import { swJS } from "./gallery/sw";
+import { applyCors, handleCorsPreflight } from "./cors";
+
+async function routeRequest(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const { pathname } = url;
+  const m = request.method;
+
+  if (pathname === "/" && m === "GET") {
+    // On the demo deployment, flip the frontend into read-only demo chrome.
+    const html = env.DEMO_MODE === "1" ? galleryDemoHTML : galleryHTML;
+    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  }
+  if (pathname === "/manifest.webmanifest" && m === "GET") {
+    return new Response(manifestJSON, { headers: { "content-type": "application/manifest+json" } });
+  }
+  if (pathname === "/sw.js" && m === "GET") {
+    return new Response(swJS, { headers: { "content-type": "text/javascript" } });
+  }
+
+  // Health check endpoint (public probe)
+  if ((pathname === "/api/health" || pathname === "/api/v1/health") && m === "GET") {
+    return handleHealth(request, env);
+  }
+
+  // Multipart upload endpoints (up to 3GB, 50MB chunks)
+  if (pathname === "/api/upload/multipart/init" || pathname === "/api/v1/upload/multipart/init") {
+    return m === "POST" ? handleMultipartInit(request, env) : err(405, "method not allowed");
+  }
+  if (pathname === "/api/upload/multipart/part" || pathname === "/api/v1/upload/multipart/part") {
+    return m === "PUT" || m === "POST" ? handleMultipartPart(request, env) : err(405, "method not allowed");
+  }
+  if (pathname === "/api/upload/multipart/complete" || pathname === "/api/v1/upload/multipart/complete") {
+    return m === "POST" ? handleMultipartComplete(request, env) : err(405, "method not allowed");
+  }
+  if (pathname === "/api/upload/multipart/abort" || pathname === "/api/v1/upload/multipart/abort") {
+    return m === "POST" ? handleMultipartAbort(request, env) : err(405, "method not allowed");
+  }
+
+  // Standard direct upload endpoint (with v1 alias, max 90MB)
+  if (pathname === "/api/upload" || pathname === "/api/v1/upload") {
+    return m === "POST" ? handleUpload(request, env) : err(405, "method not allowed");
+  }
+
+  // List endpoint (with v1 alias)
+  if (pathname === "/api/list" || pathname === "/api/v1/list") {
+    return m === "GET" ? handleList(request, env) : err(405, "method not allowed");
+  }
+
+  if (pathname.startsWith("/i/")) {
+    const id = decodeURIComponent(pathname.slice("/i/".length));
+    return m === "GET" ? handleImage(request, env, id) : err(405, "method not allowed");
+  }
+  if (pathname.startsWith("/api/img/") || pathname.startsWith("/api/v1/img/")) {
+    const prefix = pathname.startsWith("/api/v1/img/") ? "/api/v1/img/" : "/api/img/";
+    const id = decodeURIComponent(pathname.slice(prefix.length));
+    return m === "DELETE" ? handleDelete(request, env, id) : err(405, "method not allowed");
+  }
+  if (pathname.startsWith("/api/share/") || pathname.startsWith("/api/v1/share/")) {
+    const prefix = pathname.startsWith("/api/v1/share/") ? "/api/v1/share/" : "/api/share/";
+    const id = decodeURIComponent(pathname.slice(prefix.length));
+    return m === "POST" ? handleShareCreate(request, env, id) : err(405, "method not allowed");
+  }
+  if (pathname.startsWith("/s/")) {
+    const id = decodeURIComponent(pathname.slice("/s/".length));
+    return m === "GET" ? handleSharedItem(request, env, id) : err(405, "method not allowed");
+  }
+  return err(404, "not found");
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    const { pathname } = url;
-    const m = request.method;
-
-    if (pathname === "/" && m === "GET") {
-      // On the demo deployment, flip the frontend into read-only demo chrome.
-      const html = env.DEMO_MODE === "1" ? galleryDemoHTML : galleryHTML;
-      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
-    }
-    if (pathname === "/manifest.webmanifest" && m === "GET") {
-      return new Response(manifestJSON, { headers: { "content-type": "application/manifest+json" } });
-    }
-    if (pathname === "/sw.js" && m === "GET") {
-      return new Response(swJS, { headers: { "content-type": "text/javascript" } });
+    // Intercept OPTIONS preflight request prior to any auth or routing
+    if (request.method === "OPTIONS") {
+      return handleCorsPreflight(request);
     }
 
-    // Health check endpoint (public probe)
-    if ((pathname === "/api/health" || pathname === "/api/v1/health") && m === "GET") {
-      return handleHealth(request, env);
-    }
-
-    // Multipart upload endpoints (up to 3GB, 50MB chunks)
-    if (pathname === "/api/upload/multipart/init" || pathname === "/api/v1/upload/multipart/init") {
-      return m === "POST" ? handleMultipartInit(request, env) : err(405, "method not allowed");
-    }
-    if (pathname === "/api/upload/multipart/part" || pathname === "/api/v1/upload/multipart/part") {
-      return m === "PUT" ? handleMultipartPart(request, env) : err(405, "method not allowed");
-    }
-    if (pathname === "/api/upload/multipart/complete" || pathname === "/api/v1/upload/multipart/complete") {
-      return m === "POST" ? handleMultipartComplete(request, env) : err(405, "method not allowed");
-    }
-    if (pathname === "/api/upload/multipart/abort" || pathname === "/api/v1/upload/multipart/abort") {
-      return m === "POST" ? handleMultipartAbort(request, env) : err(405, "method not allowed");
-    }
-
-    // Standard direct upload endpoint (with v1 alias, max 90MB)
-    if (pathname === "/api/upload" || pathname === "/api/v1/upload") {
-      return m === "POST" ? handleUpload(request, env) : err(405, "method not allowed");
-    }
-
-    // List endpoint (with v1 alias)
-    if (pathname === "/api/list" || pathname === "/api/v1/list") {
-      return m === "GET" ? handleList(request, env) : err(405, "method not allowed");
-    }
-
-    if (pathname.startsWith("/i/")) {
-      const id = decodeURIComponent(pathname.slice("/i/".length));
-      return m === "GET" ? handleImage(request, env, id) : err(405, "method not allowed");
-    }
-    if (pathname.startsWith("/api/img/") || pathname.startsWith("/api/v1/img/")) {
-      const prefix = pathname.startsWith("/api/v1/img/") ? "/api/v1/img/" : "/api/img/";
-      const id = decodeURIComponent(pathname.slice(prefix.length));
-      return m === "DELETE" ? handleDelete(request, env, id) : err(405, "method not allowed");
-    }
-    if (pathname.startsWith("/api/share/") || pathname.startsWith("/api/v1/share/")) {
-      const prefix = pathname.startsWith("/api/v1/share/") ? "/api/v1/share/" : "/api/share/";
-      const id = decodeURIComponent(pathname.slice(prefix.length));
-      return m === "POST" ? handleShareCreate(request, env, id) : err(405, "method not allowed");
-    }
-    if (pathname.startsWith("/s/")) {
-      const id = decodeURIComponent(pathname.slice("/s/".length));
-      return m === "GET" ? handleSharedItem(request, env, id) : err(405, "method not allowed");
-    }
-    return err(404, "not found");
+    const response = await routeRequest(request, env);
+    return applyCors(response, request);
   },
 } satisfies ExportedHandler<Env>;
