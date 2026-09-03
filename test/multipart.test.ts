@@ -6,7 +6,7 @@ const T = { authorization: "Bearer test-token" };
 describe("multipart upload workflow", () => {
   it("init -> upload parts -> complete full lifecycle", async () => {
     // 1. Init multipart upload session
-    const totalSize = 50 * 1024 * 1024 + 4;
+    const totalSize = 20 * 1024 * 1024 + 4;
     const initRes = await SELF.fetch("https://x/api/upload/multipart/init", {
       method: "POST",
       headers: { ...T, "content-type": "application/json" },
@@ -21,10 +21,10 @@ describe("multipart upload workflow", () => {
     }>();
     expect(id).toBeDefined();
     expect(uploadId).toBeDefined();
-    expect(chunkSize).toBe(50 * 1024 * 1024);
+    expect(chunkSize).toBe(20 * 1024 * 1024);
 
-    // 2. Upload Part 1 (all non-final parts use the advertised 50MB size)
-    const chunk1 = new Uint8Array(50 * 1024 * 1024);
+    // 2. Upload Part 1 (all non-final parts use the advertised 20MB size)
+    const chunk1 = new Uint8Array(20 * 1024 * 1024);
     chunk1[0] = 1;
     chunk1[1] = 2;
     const part1Res = await SELF.fetch(

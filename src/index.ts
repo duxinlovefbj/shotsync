@@ -90,7 +90,14 @@ export default {
       return handleCorsPreflight(request);
     }
 
-    const response = await routeRequest(request, env);
-    return applyCors(response, request);
+    try {
+      const response = await routeRequest(request, env);
+      return applyCors(response, request);
+    } catch (error) {
+      console.error("Unhandled Worker error:", error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const fallback = err(500, `Internal Server Error: ${errorMsg}`, "INTERNAL_ERROR");
+      return applyCors(fallback, request);
+    }
   },
 } satisfies ExportedHandler<Env>;

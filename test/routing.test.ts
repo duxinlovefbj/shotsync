@@ -56,7 +56,7 @@ describe("routing end-to-end", () => {
     expect(data.ok).toBe(true);
     expect(data.version).toBe("1.1.0");
     expect(data.storage).toBe("r2");
-    expect(data.maxUploadBytes).toBe(90 * 1024 * 1024);
+    expect(data.maxUploadBytes).toBe(20 * 1024 * 1024);
   });
 
   it("supports /api/v1/* aliases", async () => {

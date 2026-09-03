@@ -35,9 +35,9 @@
     "version": "1.1.0",
     "storage": "r2",
     "maxUploadBytes": 94371840,
-    "maxSingleUploadBytes": 94371840,
+    "maxSingleUploadBytes": 20971520,
     "maxTotalFileBytes": 3221225472,
-    "recommendedChunkSizeBytes": 52428800,
+    "recommendedChunkSizeBytes": 20971520,
     "largeFileThresholdBytes": 524288000,
     "largeFileMaxShareTtlSec": 259200,
     "features": {
@@ -51,16 +51,16 @@
 
 ---
 
-## 3. 大文件分块上传链路 (Multipart Upload, 90MB ~ 3GB)
+## 3. 大文件分块上传链路 (Multipart Upload, 20MB ~ 3GB)
 
-针对大于 90MB 的大文件，采用 3 步分块传输：
+针对大于 20MB 的大文件，采用 3 步分块传输：
 
 ```text
 客户端                                     Worker (R2)
   │                                           │
   ├─── 1. POST /api/upload/multipart/init ───>│ (创建分块会话, 返回 uploadId, id)
   │                                           │
-  ├─── 2. PUT  /api/upload/multipart/part ────>│ (并发/循环上传每个 50MB 分块, 返回 etag)
+  ├─── 2. PUT  /api/upload/multipart/part ────>│ (并发/循环上传每个 20MB 分块, 返回 etag)
   ├───    PUT  /api/upload/multipart/part ────>│
   │                                           │
   └─── 3. POST /api/upload/multipart/complete >│ (提交所有分块的 partNumber+etag, 完成合并)
@@ -84,14 +84,14 @@
     "origName": "huge_video.mp4",
     "uploadId": "IB44gK...xyz",
     "uploadToken": "eyJpZCI6...signature",
-    "chunkSize": 52428800,
+    "chunkSize": 20971520,
     "maxTotalBytes": 3221225472
   }
   ```
 
 `uploadToken` 必须原样保存，并在后续三个接口中通过 `X-Multipart-Token` 请求头携带。它绑定了 `id`、`uploadId`、声明文件大小和分块大小，不能由客户端自行修改。
 
-### 3.2 上传单个分块 (50MB)
+### 3.2 上传单个分块 (20MB)
 - **方法与路径**: `PUT /api/upload/multipart/part?id=<id>&uploadId=<uploadId>&partNumber=<N>`
 - **鉴权**: 必须
 - **请求头**: `X-Multipart-Token: <init 返回的 uploadToken>`；如果提供 `Content-Length`，必须与该分块实际长度一致

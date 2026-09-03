@@ -8,9 +8,9 @@ export interface Env {
   DEMO_MODE?: string;
 }
 
-export const MAX_SINGLE_UPLOAD_BYTES = 90 * 1024 * 1024; // 90 MB for direct single-request upload
+export const MAX_SINGLE_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB for direct single-request upload
 export const MAX_TOTAL_FILE_BYTES = 3 * 1024 * 1024 * 1024; // 3 GB total max file size
-export const RECOMMENDED_CHUNK_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB per multipart chunk
+export const RECOMMENDED_CHUNK_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB per multipart chunk
 export const LARGE_FILE_THRESHOLD_BYTES = 500 * 1024 * 1024; // 500 MB threshold
 export const LARGE_FILE_MAX_SHARE_TTL_SEC = 3 * 24 * 3600; // 3 days max share TTL for large files (>500MB)
 

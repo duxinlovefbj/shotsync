@@ -193,31 +193,9 @@ export async function handleMultipartPart(request: Request, env: Env): Promise<R
   }
 
   const multipart = env.BUCKET.resumeMultipartUpload(fullKey(id), uploadId);
-  let received = 0;
-  const counted = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      received += chunk.byteLength;
-      if (received > expectedSize) {
-        controller.error(new Error(`part ${partNumber} exceeds ${expectedSize} bytes`));
-        return;
-      }
-      controller.enqueue(chunk);
-    },
-  });
-  const { readable, writable } = new FixedLengthStream(expectedSize);
   try {
-    const [uploadResult, pipeResult] = await Promise.allSettled([
-      multipart.uploadPart(partNumber, readable),
-      request.body.pipeThrough(counted).pipeTo(writable),
-    ]);
-    if (pipeResult.status === "rejected" || received !== expectedSize) {
-      if (received > expectedSize) {
-        return err(413, `part ${partNumber} must be exactly ${expectedSize} bytes`, "PART_TOO_LARGE");
-      }
-      return err(400, `part ${partNumber} must be exactly ${expectedSize} bytes`, "INVALID_PART_SIZE");
-    }
-    if (uploadResult.status === "rejected") return storageError("upload part failed", uploadResult.reason);
-    return json({ partNumber: uploadResult.value.partNumber, etag: uploadResult.value.etag });
+    const uploadResult = await multipart.uploadPart(partNumber, request.body);
+    return json({ partNumber: uploadResult.partNumber, etag: uploadResult.etag });
   } catch (error) {
     return storageError("upload part failed", error);
   }

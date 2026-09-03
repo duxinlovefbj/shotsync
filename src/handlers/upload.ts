@@ -25,7 +25,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   if (full.size > MAX_SINGLE_UPLOAD_BYTES) {
     return err(
       413,
-      `file exceeds direct upload limit (${MAX_SINGLE_UPLOAD_BYTES} bytes). Use multipart upload for files up to 3GB.`,
+      `file exceeds direct upload limit (${MAX_SINGLE_UPLOAD_BYTES} bytes, 20MB). Use multipart upload for larger files up to 3GB.`,
       "FILE_TOO_LARGE"
     );
   }
