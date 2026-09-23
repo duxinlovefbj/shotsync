@@ -10,8 +10,10 @@ import { signShare, verifyShare } from "../share";
 import { getFull } from "./image";
 
 const DEFAULT_SHARE_TTL_SEC = 7 * 24 * 3600; // default 7 days
-const SHORT_CODE_BYTES = 10; // 80 bits of entropy, encoded as 16 human-friendly characters
+const SHORT_CODE_BYTES = 7; // encode the first 50 random bits as 10 human-friendly characters
+const SHORT_CODE_LENGTH = 10;
 const SHORT_CODE_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+const SHORT_CODE_PATTERN = /^[0-9a-hjkmnp-tv-z]{10}$/;
 
 interface ShortShare {
   id: string;
@@ -27,11 +29,12 @@ function randomShortCode(): string {
   for (const byte of bytes) {
     buffer = (buffer << 8) | byte;
     bits += 8;
-    while (bits >= 5) {
+    while (bits >= 5 && code.length < SHORT_CODE_LENGTH) {
       bits -= 5;
       code += SHORT_CODE_ALPHABET[(buffer >> bits) & 31];
       buffer &= (1 << bits) - 1;
     }
+    if (code.length === SHORT_CODE_LENGTH) break;
   }
   return code;
 }
@@ -97,7 +100,7 @@ export async function handleShareCreate(request: Request, env: Env, id: string):
 // GET /r/<code> (public) -> resolve a short code and serve its signed item.
 export async function handleShortShare(request: Request, env: Env, code: string): Promise<Response> {
   const normalizedCode = code.toLowerCase().replace(/o/g, "0").replace(/[il]/g, "1");
-  if (!/^[0-9a-hjkmnp-tv-z]{16}$/.test(normalizedCode)) {
+  if (!SHORT_CODE_PATTERN.test(normalizedCode)) {
     return err(404, "short link not found", "SHORT_LINK_NOT_FOUND");
   }
 

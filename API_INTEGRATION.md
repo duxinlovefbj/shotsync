@@ -28,14 +28,14 @@
 
 ```json
 {
-  "url": "https://shotsync.example.workers.dev/r/AbCdEfGhIjKlMnOp",
-  "code": "AbCdEfGhIjKlMnOp",
+  "url": "https://shotsync.example.workers.dev/r/ab3d5f7hjk",
+  "code": "ab3d5f7hjk",
   "exp": 1725120000000,
   "ttlSec": 604800
 }
 ```
 
-把链接发给对方后，访问 `GET /r/<code>` 即可查看该文件；短码与签名共享原有有效期，过期后不可访问。短码包含 16 个不区分大小写的字符，由 80 位随机数生成，并避开容易看错的字符。
+把链接发给对方后，访问 `GET /r/<code>` 即可查看该文件；短码与签名共享原有有效期，过期后不可访问。短码包含 10 个不区分大小写的字符，由 50 位随机数生成，并避开容易看错的字符。
 
 ---
 
