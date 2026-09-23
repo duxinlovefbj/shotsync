@@ -7,6 +7,10 @@ compatibility_flags = ["nodejs_compat"]
 binding = "BUCKET"
 bucket_name = "shotsync"
 
+[[kv_namespaces]]
+binding = "SHORT_LINKS"
+id = "7b952996871e45e99098db14200be927"
+
 # Inject AUTH_TOKEN via: wrangler secret put AUTH_TOKEN — do not hardcode here
 
 # Public read-only demo pool: deploy with `wrangler deploy --env demo`.

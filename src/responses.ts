@@ -2,6 +2,7 @@
 
 export interface Env {
   BUCKET: R2Bucket;
+  SHORT_LINKS: KVNamespace;
   AUTH_TOKEN: string;
   // "1" on the public demo deployment: reads (list/view) skip auth, writes
   // (upload/delete/share-create) still require the token. Unset in normal pools.

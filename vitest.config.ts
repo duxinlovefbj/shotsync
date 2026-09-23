@@ -6,6 +6,7 @@ export default defineWorkersConfig({
       workers: {
         miniflare: {
           r2Buckets: ["BUCKET"],
+          kvNamespaces: ["SHORT_LINKS"],
           bindings: { AUTH_TOKEN: "test-token" },
         },
         wrangler: { configPath: "./wrangler.toml" },

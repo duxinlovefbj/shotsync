@@ -10,6 +10,31 @@ import { signShare, verifyShare } from "../share";
 import { getFull } from "./image";
 
 const DEFAULT_SHARE_TTL_SEC = 7 * 24 * 3600; // default 7 days
+const SHORT_CODE_BYTES = 10; // 80 bits of entropy, encoded as 16 human-friendly characters
+const SHORT_CODE_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+
+interface ShortShare {
+  id: string;
+  exp: number;
+  sig: string;
+}
+
+function randomShortCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(SHORT_CODE_BYTES));
+  let code = "";
+  let buffer = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      code += SHORT_CODE_ALPHABET[(buffer >> bits) & 31];
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  return code;
+}
 
 // POST /api/share/<id> (authed) -> mint a public, signed, expiring URL for one item.
 export async function handleShareCreate(request: Request, env: Env, id: string): Promise<Response> {
@@ -50,8 +75,40 @@ export async function handleShareCreate(request: Request, env: Env, id: string):
   // Signing key is AUTH_TOKEN: rotating it immediately invalidates ALL live share links.
   const sig = await signShare(id, exp, env.AUTH_TOKEN);
   const origin = urlObj.origin;
-  const url = `${origin}/s/${encodeURIComponent(id)}?exp=${exp}&sig=${sig}`;
-  return json({ url, exp, ttlSec, isLargeFile, maxTtlCapped: isLargeFile && ttlSec <= LARGE_FILE_MAX_SHARE_TTL_SEC });
+  let code = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const candidate = randomShortCode();
+    if (await env.SHORT_LINKS.get(candidate) === null) {
+      code = candidate;
+      break;
+    }
+  }
+  if (!code) return err(503, "could not allocate a short link", "SHORT_LINK_UNAVAILABLE");
+
+  const mapping: ShortShare = { id, exp, sig };
+  await env.SHORT_LINKS.put(code, JSON.stringify(mapping), {
+    expirationTtl: Math.max(60, Math.ceil(ttlSec)),
+  });
+
+  const url = `${origin}/r/${code}`;
+  return json({ url, code, exp, ttlSec, isLargeFile, maxTtlCapped: isLargeFile && ttlSec <= LARGE_FILE_MAX_SHARE_TTL_SEC });
+}
+
+// GET /r/<code> (public) -> resolve a short code and serve its signed item.
+export async function handleShortShare(request: Request, env: Env, code: string): Promise<Response> {
+  const normalizedCode = code.toLowerCase().replace(/o/g, "0").replace(/[il]/g, "1");
+  if (!/^[0-9a-hjkmnp-tv-z]{16}$/.test(normalizedCode)) {
+    return err(404, "short link not found", "SHORT_LINK_NOT_FOUND");
+  }
+
+  const mapping = await env.SHORT_LINKS.get<ShortShare>(normalizedCode, "json");
+  if (!mapping) return err(404, "short link not found", "SHORT_LINK_NOT_FOUND");
+
+  const url = new URL(request.url);
+  url.pathname = `/s/${encodeURIComponent(mapping.id)}`;
+  url.searchParams.set("exp", String(mapping.exp));
+  url.searchParams.set("sig", mapping.sig);
+  return handleSharedItem(new Request(url, request), env, mapping.id);
 }
 
 // GET /s/<id>?exp=&sig=  (public, no token) -> serve the one signed item.

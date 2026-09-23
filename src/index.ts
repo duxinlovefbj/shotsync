@@ -10,7 +10,7 @@ import {
 import { handleList } from "./handlers/list";
 import { handleImage } from "./handlers/image";
 import { handleDelete } from "./handlers/del";
-import { handleShareCreate, handleSharedItem } from "./handlers/share";
+import { handleShareCreate, handleSharedItem, handleShortShare } from "./handlers/share";
 import { galleryDemoHTML, galleryHTML } from "./gallery/page";
 import { manifestJSON } from "./gallery/manifest";
 import { swJS } from "./gallery/sw";
@@ -79,6 +79,10 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
   if (pathname.startsWith("/s/")) {
     const id = decodeURIComponent(pathname.slice("/s/".length));
     return m === "GET" ? handleSharedItem(request, env, id) : err(405, "method not allowed");
+  }
+  if (pathname.startsWith("/r/")) {
+    const code = pathname.slice("/r/".length);
+    return m === "GET" ? handleShortShare(request, env, code) : err(405, "method not allowed");
   }
   return err(404, "not found");
 }

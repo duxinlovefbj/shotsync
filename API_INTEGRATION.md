@@ -22,6 +22,21 @@
 - **API 路由别名**:
   - 所有 `/api/*` 接口同时支持 `/api/v1/*` 别名。
 
+## 分享短码
+
+`POST /api/share/<id>` 需要 Bearer Token。成功时返回短码链接，例如：
+
+```json
+{
+  "url": "https://shotsync.example.workers.dev/r/AbCdEfGhIjKlMnOp",
+  "code": "AbCdEfGhIjKlMnOp",
+  "exp": 1725120000000,
+  "ttlSec": 604800
+}
+```
+
+把链接发给对方后，访问 `GET /r/<code>` 即可查看该文件；短码与签名共享原有有效期，过期后不可访问。短码包含 16 个不区分大小写的字符，由 80 位随机数生成，并避开容易看错的字符。
+
 ---
 
 ## 2. 服务探测接口 (Health & Capabilities)
@@ -148,7 +163,7 @@
 
 ## 4. 分块下载与多线程/断点续传 (HTTP Range)
 
-无论是私有文件访问（`GET /i/<id>`）还是公开分享链接（`GET /s/<id>?exp=..&sig=..`），均支持标准的 HTTP `Range` 请求头：
+无论是私有文件访问（`GET /i/<id>`）、签名分享链接（`GET /s/<id>?exp=..&sig=..`）还是短码分享链接（`GET /r/<code>`），均支持标准的 HTTP `Range` 请求头：
 
 ### 请求示例
 ```http
@@ -257,7 +272,7 @@ class ShotSyncClient:
             raise e
 
     def share(self, item_id: str, ttl_seconds: int = 604800) -> str:
-        """生成分享链接（>500MB 大文件服务端自动限制为最长 3 天）"""
+        """生成短码分享链接（>500MB 大文件服务端自动限制为最长 3 天）"""
         res = requests.post(
             f"{self.base_url}/api/share/{item_id}",
             headers=self.headers,

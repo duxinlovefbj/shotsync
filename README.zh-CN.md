@@ -10,11 +10,11 @@
 
 ## 这是什么
 
-一个 **Cloudflare Worker + R2 存储桶**，配一个**网页相册（PWA）**：
+一个 **Cloudflare Worker + R2 存储桶 + KV**，配一个**网页相册（PWA）**：
 
 - 上传**图片**（浏览器端转 JPEG + 生成缩略图）和**文字**片段。
 - 任意设备倒序看瀑布流，点开可**保存/下载**、**删除**。
-- 给单个 item 生成**带签名、会过期的公开链接**分享出去——而不暴露池子里的其余内容。
+- 给单个 item 生成**带签名、会过期的公开短码链接**分享出去——而不暴露池子里的其余内容。
 - **token 门禁**：一个共享密钥解锁整个池子，其余一律私有。
 - 一个 **30 天自动清理的中转池**，不是归档仓库。
 
@@ -49,11 +49,11 @@ iCloud / AirDrop / 网盘 / 公开图床，要么手动、要么锁死在某个�
 - 跨设备图片 + 文字池（共享剪贴板 + 截图落点）
 - PWA 相册——「添加到主屏幕」，无需原生 App、不上应用商店
 - 客户端 HEIC→JPEG + 缩略图生成（省流量；Worker 不做图像处理）
-- 带签名、会过期的公开分享链接（HMAC-SHA256，7 天）
+- 带签名、会过期的公开短码链接（HMAC-SHA256，默认 7 天）
 - 单个保存/下载 + 多选批量删除
 - 单 token 鉴权、constant-time 比较、token 永不进 URL
 - 30 天自动留存（R2 lifecycle）
-- 完全跑在 Cloudflare 免费档（Workers + R2）
+- 运行在 Cloudflare Workers + R2 + KV 上
 - ~50 个测试（Vitest + `@cloudflare/vitest-pool-workers`）
 
 ## 自己部署（约 5 分钟）
@@ -69,11 +69,18 @@ npx wrangler login
 # 1. 建 R2 存储桶（名字要和 wrangler.toml 里的 bucket_name 一致）
 npx wrangler r2 bucket create shotsync
 
-# 2. 设置共享访问 token —— 任意长随机串；每台设备要输它
+# 2. 建短码 KV 命名空间，并把输出的 ID 填入 wrangler.toml 的 SHORT_LINKS 绑定
+npx wrangler kv namespace create SHORT_LINKS
+# 在 wrangler.toml 添加：
+# [[kv_namespaces]]
+# binding = "SHORT_LINKS"
+# id = "上一步输出的 ID"
+
+# 3. 设置共享访问 token —— 任意长随机串；每台设备要输它
 openssl rand -hex 24                  # 生成一个，复制下来
 npx wrangler secret put AUTH_TOKEN    # 提示时粘贴
 
-# 3. 部署
+# 4. 部署
 npm run deploy
 ```
 
@@ -103,7 +110,7 @@ npm run deploy
 ### 3. 点开单个 item
 点任意缩略图/卡片全屏打开，然后：
 - **`保存` / `复制`** —— 图片：存到相册（手机）或下载（桌面）；文字：复制到剪贴板。
-- **`分享`** —— 为这一个 item 生成 **7 天有效的公开链接**并复制到剪贴板。拿到链接的人只能看这一个；池子其余部分仍私有。
+- **`分享`** —— 为这一个 item 生成 **7 天有效的公开短码链接**并复制到剪贴板。拿到链接的人只能看这一个；池子其余部分仍私有。
 - **`删除`** —— 删掉这个 item。
 - **`关闭`** —— 返回相册。
 
@@ -115,7 +122,7 @@ npm run deploy
 ## 安全模型与限制（请阅读）
 
 - **单一共享 token。** 拿到「地址 + token」的任何人都能看/传/删。这是单人 / 可信小圈子工具，不是多租户。用 `npx wrangler secret put AUTH_TOKEN` 轮换——注意这会同时让所有现存分享链接失效（token 也是链接的签名密钥）。
-- **分享链接是公开的**，直到过期（7 天）：拿到链接的人都能看那一个 item。
+- **分享链接是公开的**，直到过期（7 天）：拿到链接的人都能看那一个 item。短码有 80 位随机熵，不区分大小写，并避开容易看错的字符；链接过期后自动失效。
 - **中转池，不是归档。** item 按设计 30 天后自动删除。
 - **界面目前是中文。** 欢迎提 i18n PR。
 - Worker 原样存收到的字节（不做服务端图像处理）；格式转换和缩略图都在客户端做。

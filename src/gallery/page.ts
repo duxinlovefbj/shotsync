@@ -241,9 +241,9 @@ $("#shareDialogConfirm").onclick = async () => {
     const ttlDesc = days >= 1 ? days + "天" : Math.round(actualTtl / 3600) + "小时";
     try {
       await navigator.clipboard.writeText(url);
-      toast("链接已复制（" + ttlDesc + "有效）");
+      toast("短码链接已复制（" + ttlDesc + "有效）");
     } catch {
-      prompt("分享链接（" + ttlDesc + "有效），选中复制：", url);
+      prompt("短码链接（" + ttlDesc + "有效），选中复制：", url);
     }
   } catch { toast("生成链接失败"); }
 };

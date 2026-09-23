@@ -10,11 +10,11 @@ Your own cross-device image & text pool, deployable to Cloudflare's free tier in
 
 ## What it is
 
-A single **Cloudflare Worker + R2 bucket** backing a small **PWA gallery**:
+A **Cloudflare Worker + R2 bucket + KV namespace** backing a small **PWA gallery**:
 
 - Upload **images** (auto-converted to JPEG + thumbnailed client-side) and **text** snippets.
 - View a newest-first feed on any device; tap to view full, **save/download**, or **delete**.
-- Mint a **signed, expiring public link** to share one item — without exposing the rest of the pool.
+- Mint a **signed, expiring public short link** to share one item — without exposing the rest of the pool.
 - **Token-gated**: one shared secret unlocks the pool; everything else stays private.
 - A **30-day transit pool** (auto-deleted), not an archive.
 
@@ -49,11 +49,11 @@ The dividing line is **a live transfer vs. a pool that waits**. LocalSend and Pa
 - Cross-device image + text pool (a shared clipboard + screenshot drop)
 - PWA gallery — "Add to Home Screen", no native app, no App Store
 - Client-side HEIC→JPEG + thumbnail generation (mobile-friendly; the Worker does no image processing)
-- Signed, expiring public share links (HMAC-SHA256, 7 days)
+- Signed, expiring public short links (HMAC-SHA256, 7-day default)
 - Per-item save/download + multi-select batch delete
 - Single-token auth, constant-time compare, token never in URLs
 - 30-day auto-retention via R2 lifecycle
-- Runs entirely on the Cloudflare free tier (Workers + R2)
+- Runs on Cloudflare Workers + R2 + KV
 - ~50 tests (Vitest + `@cloudflare/vitest-pool-workers`)
 
 ## Deploy your own (~5 min)
@@ -69,11 +69,18 @@ npx wrangler login
 # 1. create the R2 bucket (name must match bucket_name in wrangler.toml)
 npx wrangler r2 bucket create shotsync
 
-# 2. set the shared access token — any long random string; you enter it on each device
+# 2. create a KV namespace for short links and add its ID to the SHORT_LINKS binding in wrangler.toml
+npx wrangler kv namespace create SHORT_LINKS
+# In wrangler.toml, add:
+# [[kv_namespaces]]
+# binding = "SHORT_LINKS"
+# id = "the ID printed above"
+
+# 3. set the shared access token — any long random string; you enter it on each device
 openssl rand -hex 24                  # generate one, copy it
 npx wrangler secret put AUTH_TOKEN    # paste it when prompted
 
-# 3. deploy
+# 4. deploy
 npm run deploy
 ```
 
